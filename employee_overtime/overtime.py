@@ -1,7 +1,7 @@
 """Core overtime logic for the Employee Overtime app.
 
 Contains:
-  * create_overtime_from_checkin  -> Employee Checkin "before_insert" hook
+  * create_overtime_from_checkin  -> Employee Checkin "after_insert" hook
   * process_overtime_additional_salary -> whitelisted action behind the list button
   * rate / multiplier helpers shared by both
 """
@@ -19,11 +19,12 @@ OTS = "Overtime Setting"
 # Checkin -> Employee Overtime
 # ---------------------------------------------------------------------------
 def create_overtime_from_checkin(doc, method=None):
-    """Before Insert on Employee Checkin.
+    """After Insert on Employee Checkin.
 
     On an OUT punch, find the immediately preceding punch. If it is an IN punch
     and the employee is OT-eligible, compute the overtime for that span and
-    create a draft Employee Overtime record. Never blocks the checkin save.
+    create a draft Employee Overtime record. Runs after insert so this check-in
+    already has a name to store as the OUT reference. Never blocks the save.
     """
     if doc.log_type != "OUT":
         return

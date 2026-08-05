@@ -31,6 +31,8 @@ bench --site your-site install-app employee_overtime
 bench --site your-site migrate
 ```
 
+Installing also creates a **Document Naming Rule** so Employee Overtime records are named `EMP-<MM>-#####` (e.g. `EMP-08-00001`). If a naming rule for this doctype already exists on your site, it is left untouched (its counter is preserved).
+
 Installing creates the required custom fields automatically:
 
 | DocType                       | Field                            | Type     | Purpose                                              |
@@ -77,7 +79,7 @@ Hourly rate by method:
 
 This app replaces the earlier database scripts with versioned app code:
 
-- *OT Creation* → `before_insert` hook on Employee Checkin
+- *OT Creation* → `after_insert` hook on Employee Checkin
   (`employee_overtime.overtime.create_overtime_from_checkin`).
 - *Employ OT Approve* → `EmployeeOvertime.before_submit`.
 - *OT cancel* → `EmployeeOvertime.before_cancel`.

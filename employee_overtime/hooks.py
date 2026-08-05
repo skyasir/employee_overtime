@@ -12,11 +12,13 @@ required_apps = ["hrms"]
 # ---------------------------------------------------------------------------
 # Document events
 # ---------------------------------------------------------------------------
-# On every OUT punch we try to pair it with the preceding IN punch and, if the
-# employee is OT-eligible, spin up a draft Employee Overtime record.
+# On every OUT punch we pair it with the preceding IN punch and, if the
+# employee is OT-eligible, spin up a draft Employee Overtime record. This runs
+# on after_insert (not before_insert) so the check-in's name is already
+# assigned and can be stored on the OT record.
 doc_events = {
     "Employee Checkin": {
-        "before_insert": "employee_overtime.overtime.create_overtime_from_checkin"
+        "after_insert": "employee_overtime.overtime.create_overtime_from_checkin"
     }
 }
 

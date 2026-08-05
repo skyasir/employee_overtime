@@ -15,3 +15,10 @@ build-backend = "flit_core.buildapi"
 
 [tool.flit.module]
 name = "employee_overtime"
+
+# Frappe Cloud reads this to validate app compatibility with the bench's
+# Frappe (and HR) version. Range covers v14, v15, and v16; widen the upper
+# bound if you deploy onto a newer major.
+[tool.bench.frappe-dependencies]
+frappe = ">=14.0.0,<17.0.0"
+hrms = ">=14.0.0,<17.0.0"

@@ -1,0 +1,207 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-15 14:19:38.720569",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sb_basic",
+  "maximum_overtime_hours_allowed",
+  "cb_basic",
+  "overtime_salary_component",
+  "sb_calc",
+  "overtime_calculation_method",
+  "applicable_salary_component",
+  "hourly_rate",
+  "cb_calc",
+  "days_divisor",
+  "standard_daily_hours",
+  "break_time_hours",
+  "sb_mult",
+  "standard_multiplier",
+  "cb_mult",
+  "applicable_for_public_holiday",
+  "public_holiday_multiplier",
+  "applicable_for_weekend",
+  "weekend_multiplier",
+  "sb_approver",
+  "overtime_approver"
+ ],
+ "fields": [
+  {
+   "fieldname": "sb_basic",
+   "fieldtype": "Section Break",
+   "label": "Basic"
+  },
+  {
+   "description": "Daily OT cap. Leave 0 for no cap.",
+   "fieldname": "maximum_overtime_hours_allowed",
+   "fieldtype": "Float",
+   "label": "Maximum Overtime Hours Allowed Per Day",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "cb_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Earning component OT is paid through (e.g. OverTime Allowance).",
+   "fieldname": "overtime_salary_component",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Overtime Salary Component",
+   "options": "Salary Component",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sb_calc",
+   "fieldtype": "Section Break",
+   "label": "Rate Calculation"
+  },
+  {
+   "default": "Gross Pay Based",
+   "description": "Gross Pay Based = gross_pay / days / hours. Salary Component Based = selected component / days / hours. Fixed Hourly Rate = flat rate.",
+   "fieldname": "overtime_calculation_method",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Overtime Amount Calculation",
+   "options": "Gross Pay Based\nSalary Component Based\nFixed Hourly Rate",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval: doc.overtime_calculation_method == \"Salary Component Based\"",
+   "fieldname": "applicable_salary_component",
+   "fieldtype": "Link",
+   "label": "Applicable Salary Component",
+   "mandatory_depends_on": "eval: doc.overtime_calculation_method == \"Salary Component Based\"",
+   "options": "Salary Component"
+  },
+  {
+   "depends_on": "eval: doc.overtime_calculation_method == \"Fixed Hourly Rate\"",
+   "fieldname": "hourly_rate",
+   "fieldtype": "Currency",
+   "label": "Hourly Rate",
+   "mandatory_depends_on": "eval: doc.overtime_calculation_method == \"Fixed Hourly Rate\""
+  },
+  {
+   "fieldname": "cb_calc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "31",
+   "depends_on": "eval: doc.overtime_calculation_method != \"Fixed Hourly Rate\"",
+   "description": "Monthly salary divided by this to get per-day.",
+   "fieldname": "days_divisor",
+   "fieldtype": "Int",
+   "label": "Days Divisor (Days in Month)"
+  },
+  {
+   "default": "8",
+   "depends_on": "eval: doc.overtime_calculation_method != \"Fixed Hourly Rate\"",
+   "description": "Fallback used only when the shift has no start/end time. The shift's end_time minus start_time takes precedence.",
+   "fieldname": "standard_daily_hours",
+   "fieldtype": "Float",
+   "hidden": 1,
+   "label": "Standard Daily Hours"
+  },
+  {
+   "default": "0.5",
+   "description": "Unpaid break deducted from worked hours before OT is computed.",
+   "fieldname": "break_time_hours",
+   "fieldtype": "Float",
+   "label": "Break Time (Hours)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "sb_mult",
+   "fieldtype": "Section Break",
+   "label": "Pay Rate Multipliers"
+  },
+  {
+   "default": "1.0",
+   "fieldname": "standard_multiplier",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Standard Multiplier",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "cb_mult",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "If checked, use a separate multiplier on public holidays.",
+   "fieldname": "applicable_for_public_holiday",
+   "fieldtype": "Check",
+   "label": "Apply for Public Holiday"
+  },
+  {
+   "depends_on": "eval: doc.applicable_for_public_holiday == 1",
+   "fieldname": "public_holiday_multiplier",
+   "fieldtype": "Float",
+   "label": "Public Holiday Multiplier",
+   "mandatory_depends_on": "eval: doc.applicable_for_public_holiday == 1",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "If checked, use a separate multiplier on weekends.",
+   "fieldname": "applicable_for_weekend",
+   "fieldtype": "Check",
+   "label": "Apply for Weekend"
+  },
+  {
+   "depends_on": "eval: doc.applicable_for_weekend == 1",
+   "fieldname": "weekend_multiplier",
+   "fieldtype": "Float",
+   "label": "Weekend Multiplier",
+   "mandatory_depends_on": "eval: doc.applicable_for_weekend == 1",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "sb_approver",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "Role required to approve/submit Employee Overtime.",
+   "fieldname": "overtime_approver",
+   "fieldtype": "Link",
+   "label": "OverTime Approver",
+   "options": "Role"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Employee Overtime",
+ "name": "Overtime Setting",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

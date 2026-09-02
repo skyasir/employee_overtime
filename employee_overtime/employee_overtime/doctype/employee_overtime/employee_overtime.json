@@ -9,6 +9,7 @@
   "employee_id",
   "employee_name",
   "shift_type",
+  "ot_category",
   "column_break_1",
   "date",
   "total_hours",
@@ -18,6 +19,7 @@
   "employee_checkin_id",
   "employee_check_in",
   "standard_working_hours",
+  "break_hours",
   "overtime_hours",
   "ot_multiplier",
   "column_break_ot",
@@ -165,6 +167,21 @@
    "fieldtype": "Select",
    "label": "Approval Status",
    "options": "Draft\nApproved\nRejected"
+  },
+  {
+   "description": "Category the standard hours and break were resolved from.",
+   "fieldname": "ot_category",
+   "fieldtype": "Link",
+   "label": "OT Category",
+   "options": "Overtime Category",
+   "read_only": 1
+  },
+  {
+   "description": "Unpaid break taken off worked hours before overtime was measured.",
+   "fieldname": "break_hours",
+   "fieldtype": "Float",
+   "label": "Break Hours Deducted",
+   "read_only": 1
   }
  ],
  "is_submittable": 1,

@@ -25,7 +25,8 @@ doc_events = {
 # ---------------------------------------------------------------------------
 # Install / migrate
 # ---------------------------------------------------------------------------
-# Custom fields (OT eligibility, gross pay, shift standard hours) are created
-# on install and re-asserted on every migrate so they can never drift.
+# Custom fields (OT eligibility, OT category, gross pay) are created on install
+# and re-asserted on every migrate so they can never drift. The default categories
+# and their standard-hours rules are seeded there too, only when missing.
 after_install = "employee_overtime.setup.install.after_install"
 after_migrate = "employee_overtime.setup.install.after_install"

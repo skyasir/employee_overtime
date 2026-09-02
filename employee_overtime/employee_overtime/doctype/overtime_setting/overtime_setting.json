@@ -7,6 +7,7 @@
  "field_order": [
   "sb_basic",
   "maximum_overtime_hours_allowed",
+  "maximum_shift_span_hours",
   "cb_basic",
   "overtime_salary_component",
   "sb_calc",
@@ -17,6 +18,9 @@
   "days_divisor",
   "standard_daily_hours",
   "break_time_hours",
+  "overtime_grace_period_minutes",
+  "sb_category_rules",
+  "category_rules",
   "sb_mult",
   "standard_multiplier",
   "cb_mult",
@@ -98,7 +102,7 @@
   {
    "default": "8",
    "depends_on": "eval: doc.overtime_calculation_method != \"Fixed Hourly Rate\"",
-   "description": "Fallback used only when the shift has no start/end time. The shift's end_time minus start_time takes precedence.",
+   "description": "Last-resort fallback, used only when the shift has no start/end time. Category Rules take precedence, then the shift's end_time minus start_time.",
    "fieldname": "standard_daily_hours",
    "fieldtype": "Float",
    "hidden": 1,
@@ -106,7 +110,7 @@
   },
   {
    "default": "0.5",
-   "description": "Unpaid break deducted from worked hours before OT is computed.",
+   "description": "Default unpaid break. Used for employees with no matching Category Rule, and as the break for a rule that ticks Deduct Break without giving hours.",
    "fieldname": "break_time_hours",
    "fieldtype": "Float",
    "label": "Break Time (Hours)",
@@ -170,6 +174,34 @@
    "fieldtype": "Link",
    "label": "OverTime Approver",
    "options": "Role"
+  },
+  {
+   "default": "30",
+   "description": "Extra time must cross this before any overtime is earned. 30 minutes by default, so an 8 hour shift earns OT from 8:30 onwards - and the whole extra span is then paid, not just the part past the grace.",
+   "fieldname": "overtime_grace_period_minutes",
+   "fieldtype": "Int",
+   "label": "Overtime Grace Period (Minutes)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "sb_category_rules",
+   "fieldtype": "Section Break",
+   "label": "Category Rules"
+  },
+  {
+   "description": "Standard hours and break deduction per employee category and shift length. The shift length is matched from Shift Type end time minus start time; the matched row's Shift Hours is also the divisor used for the hourly rate. Employees with no category, or a shift length no row matches, fall back to the shift length and the break above.",
+   "fieldname": "category_rules",
+   "fieldtype": "Table",
+   "label": "Category Rules",
+   "options": "Overtime Category Rule"
+  },
+  {
+   "default": "16",
+   "description": "A single IN to OUT span longer than this is treated as a bad punch pair (a missed OUT, an overnight anomaly) and is ignored. Leave 0 to use the built-in 16 hour default.",
+   "fieldname": "maximum_shift_span_hours",
+   "fieldtype": "Float",
+   "label": "Maximum Shift Span (Hours)",
+   "non_negative": 1
   }
  ],
  "issingle": 1,

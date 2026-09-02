@@ -9,10 +9,15 @@ Contains:
 import frappe
 from frappe.utils import getdate, time_diff_in_hours
 
-# Sanity ceiling: a single IN->OUT span longer than this is treated as a bad
-# pair (forgot to punch out, overnight anomaly, etc.) and is ignored.
+# Fallback sanity ceiling: a single IN->OUT span longer than this is treated as
+# a bad pair (forgot to punch out, overnight anomaly, etc.) and is ignored. Used
+# only until Maximum Shift Span is set in Overtime Setting.
 MAX_SPAN = 16.0
 OTS = "Overtime Setting"
+
+# Shift lengths are compared against the Category Rules table in hours; allow
+# about a minute of slack so a 09:00-17:00 shift still matches a rule of 8.
+HOURS_TOLERANCE = 0.02
 
 
 # ---------------------------------------------------------------------------
@@ -55,24 +60,41 @@ def create_overtime_from_checkin(doc, method=None):
 
     worked = round(time_diff_in_hours(employee_check_out, employee_check_in), 2)
 
-    ot_eligible = frappe.db.get_value("Employee", doc.employee, "custom_ot_eligible") or 0
-    if not ot_eligible or worked > MAX_SPAN:
+    # One read for both: this runs on every OUT punch on the site.
+    emp = frappe.db.get_value(
+        "Employee", doc.employee, ["custom_ot_eligible", "custom_ot_category"], as_dict=True
+    ) or {}
+    if not emp.get("custom_ot_eligible"):
         return
 
     settings = frappe.get_cached_doc(OTS)
 
-    # Standard working hours for this shift = Shift Type end_time - start_time.
-    std = _shift_standard_hours(shift)
-    if not std:
-        # Fall back to the configured standard daily hours if the shift has no times.
-        std = settings.standard_daily_hours or 0
+    max_span = settings.maximum_shift_span_hours or MAX_SPAN
+    if max_span and worked > max_span:
+        return
+
+    d = getdate(first_in)
+    category = emp.get("custom_ot_category")
+
+    # Policy: staff earn OT on weekdays only. Weekly off (Saturday) and holiday
+    # working is repaid as compensatory off, which HR grants outside this app.
+    # Which categories work that way is set on Overtime Category, not here.
+    if not _allows_holiday_overtime(category) and _is_holiday(doc.employee, d):
+        return
+
+    # Standard hours and the unpaid break both depend on category + shift length.
+    std, break_hrs = _resolve_hours(category, shift, settings)
     if not std:
         return
 
-    break_hrs = settings.break_time_hours or 0
     worked_net = round(worked - break_hrs, 2)
     ot_hours = round(worked_net - std, 2)
-    if ot_hours <= 0:
+
+    # Policy: OT applies only after 30 minutes past the regular shift, so an 8 hour
+    # shift starts earning at 8:30. The grace is a gate, not a deduction - once
+    # it is crossed the whole extra span is paid.
+    grace = (settings.overtime_grace_period_minutes or 0) / 60.0
+    if ot_hours <= 0 or ot_hours < grace:
         return
 
     # One OT record per IN punch.
@@ -86,11 +108,10 @@ def create_overtime_from_checkin(doc, method=None):
     if max_ot and ot_hours > max_ot:
         ot_hours = max_ot
 
-    day_hrs = std
-    hourly = get_hourly_rate(doc.employee, day_hrs, settings)
-
-    d = getdate(first_in)
-    multiplier = get_multiplier(d, settings)
+    # The divisor is that same category-driven standard: monthly pay per day
+    # per standard hour (e.g. 20,000 / 31 / 8).
+    hourly = get_hourly_rate(doc.employee, std, settings)
+    multiplier = get_multiplier(doc.employee, d, settings)
 
     ot_rate = hourly * multiplier
     ot_amount = ot_hours * ot_rate
@@ -102,6 +123,7 @@ def create_overtime_from_checkin(doc, method=None):
     ot.date = d
     ot.total_hours = worked
     ot.standard_working_hours = std
+    ot.break_hours = break_hrs
     ot.overtime_hours = ot_hours
     ot.ot_multiplier = multiplier
     ot.ot_rate = ot_rate
@@ -110,7 +132,113 @@ def create_overtime_from_checkin(doc, method=None):
     ot.employee_check_in = employee_check_in
     ot.employee_check_out = employee_check_out
     ot.shift_type = shift
+    ot.ot_category = category
     ot.insert(ignore_permissions=True)
+
+
+# ---------------------------------------------------------------------------
+# Category rules (overtime policy)
+# ---------------------------------------------------------------------------
+def _resolve_hours(category, shift, settings):
+    """Standard working hours and unpaid break for this employee's shift.
+
+    Per the overtime policy both depend on the employee's category and the length of the
+    shift: staff get no break deduction on a 9 hour shift but do on 8, workers
+    get one on 8 but not on 10 or 12. That matrix lives in the Category Rules
+    table on Overtime Setting so HR can edit it without a code change.
+
+    When the employee has no category, or no row matches the shift length, this
+    falls back to the shift length with the global break - the app's behaviour
+    before category rules existed.
+    """
+    shift_hours = _shift_standard_hours(shift) or settings.standard_daily_hours or 0
+    if not shift_hours:
+        return 0, 0
+
+    rule = _match_rule(category, shift_hours, settings)
+    if not rule:
+        return shift_hours, settings.break_time_hours or 0
+
+    if not rule.deduct_break:
+        return rule.shift_hours, 0
+
+    # A rule may tick Deduct Break without spelling out the hours; the global
+    # break is the default in that case.
+    return rule.shift_hours, rule.break_hours or settings.break_time_hours or 0
+
+
+def _match_rule(category, shift_hours, settings):
+    """The Category Rule for this category and shift length, or None."""
+    if not category:
+        return None
+    for rule in settings.get("category_rules") or []:
+        if rule.ot_category != category:
+            continue
+        if abs((rule.shift_hours or 0) - shift_hours) < HOURS_TOLERANCE:
+            return rule
+    return None
+
+
+def _allows_holiday_overtime(category):
+    """Whether this category earns OT for holiday / weekly-off working.
+
+    Checked before the holiday lookup itself, so the common case costs one
+    cached read rather than a query against the holiday list. An employee with
+    no category keeps the previous behaviour and earns OT on any day.
+    """
+    if not category:
+        return True
+    return bool(
+        frappe.get_cached_value("Overtime Category", category, "allow_overtime_on_holiday")
+    )
+
+
+def _is_holiday(employee, d):
+    """True when d is a holiday or weekly off for this employee.
+
+    Any row on the holiday list counts, half days included: for OT policy,
+    working a half-day holiday is still holiday working.
+    """
+    holiday_list = _holiday_list_for(employee, d)
+    if not holiday_list:
+        return False
+
+    return bool(frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": d}))
+
+
+def _holiday_list_for(employee, d):
+    """The employee's holiday list as of a date, across HR versions.
+
+    hrms v16 resolves holiday lists through Holiday List Assignment and its
+    override of `employee_holiday_list` ignores Employee.holiday_list entirely,
+    so on v15 - or a v16 site that has not created assignments yet - the
+    platform helper returns nothing. Falling back to the Employee and Company
+    fields keeps the staff rule working either way; without it every day
+    silently looks like a working day.
+    """
+    try:
+        from erpnext.setup.doctype.employee.employee import get_holiday_list_for_employee
+
+        holiday_list = get_holiday_list_for_employee(employee, False, d)
+    except Exception:
+        holiday_list = None
+
+    # The hrms override can hand back a dict when asked for one; be tolerant.
+    if isinstance(holiday_list, dict):
+        holiday_list = holiday_list.get("holiday_list")
+    if holiday_list:
+        return holiday_list
+
+    employee_fields = frappe.get_cached_value(
+        "Employee", employee, ["holiday_list", "company"]
+    )
+    if not employee_fields:
+        return None
+
+    holiday_list, company = employee_fields
+    if holiday_list:
+        return holiday_list
+    return company and frappe.get_cached_value("Company", company, "default_holiday_list")
 
 
 # ---------------------------------------------------------------------------
@@ -214,13 +342,15 @@ def _component_amount(employee, component):
     ) or 0
 
 
-def get_multiplier(d, settings):
-    """Pick the pay multiplier for the OT date (public holiday > weekend > standard)."""
+def get_multiplier(employee, d, settings):
+    """Pick the pay multiplier for the OT date (public holiday > weekend > standard).
+
+    The holiday check reads the employee's own holiday list, so a holiday on one
+    company's calendar no longer lifts another company's OT rate.
+    """
     multiplier = settings.standard_multiplier or 1.0
 
-    if settings.applicable_for_public_holiday and frappe.db.exists(
-        "Holiday", {"holiday_date": d}
-    ):
+    if settings.applicable_for_public_holiday and _is_holiday(employee, d):
         multiplier = settings.public_holiday_multiplier or multiplier
     elif settings.applicable_for_weekend and d.weekday() >= 5:
         multiplier = settings.weekend_multiplier or multiplier

@@ -15,6 +15,10 @@ through an approval workflow, and pays it out via Additional Salary.
    range into submitted **Additional Salary** records and flags each as processed.
 4. **Protected** — a processed OT record cannot be cancelled until its Additional
    Salary is reversed.
+5. **Never blocks a punch** — overtime is computed inside a savepoint. If it
+   fails for any reason, its partial writes are rolled back, the traceback goes
+   to the Error Log, and the Employee Checkin still saves. A biometric sync is
+   never held up by an overtime problem.
 
 ## Requirements
 

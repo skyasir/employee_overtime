@@ -2,6 +2,7 @@
 
 Contains:
   * create_overtime_from_checkin  -> Employee Checkin "after_insert" hook
+    (a non-blocking wrapper around _create_overtime_from_checkin)
   * process_overtime_additional_salary -> whitelisted action behind the list button
   * rate / multiplier helpers shared by both
 """
@@ -24,12 +25,35 @@ HOURS_TOLERANCE = 0.02
 # Checkin -> Employee Overtime
 # ---------------------------------------------------------------------------
 def create_overtime_from_checkin(doc, method=None):
-    """After Insert on Employee Checkin.
+    """After Insert on Employee Checkin. Never blocks the save.
+
+    Overtime is downstream convenience; the punch itself is the attendance
+    record, and a check-in arriving from a biometric device has to persist even
+    when overtime cannot be worked out for it. The computation therefore runs
+    inside a savepoint: on any error its partial writes are rolled back, the
+    traceback is logged, and the check-in is left untouched.
+    """
+    save_point = "employee_overtime_hook"
+    frappe.db.savepoint(save_point)
+    try:
+        _create_overtime_from_checkin(doc)
+    except Exception:
+        frappe.db.rollback(save_point=save_point)
+        frappe.log_error(
+            frappe.get_traceback(),
+            f"Overtime creation failed for Employee Checkin {doc.name}",
+        )
+    else:
+        frappe.db.release_savepoint(save_point)
+
+
+def _create_overtime_from_checkin(doc):
+    """Pair this OUT punch with the preceding IN and create the draft overtime.
 
     On an OUT punch, find the immediately preceding punch. If it is an IN punch
     and the employee is OT-eligible, compute the overtime for that span and
     create a draft Employee Overtime record. Runs after insert so this check-in
-    already has a name to store as the OUT reference. Never blocks the save.
+    already has a name to store as the OUT reference.
     """
     if doc.log_type != "OUT":
         return

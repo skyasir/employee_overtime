@@ -1,4 +1,0 @@
-include license.txt
-include README.md
-recursive-include employee_overtime *.css *.csv *.html *.ico *.js *.json *.md *.png *.py *.svg *.txt
-recursive-exclude employee_overtime *.pyc
